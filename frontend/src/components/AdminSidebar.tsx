@@ -60,7 +60,7 @@ export function AdminSidebar({ collapsed, onCollapsedChange }: AdminSidebarProps
           "p-4 border-b border-sidebar-border flex items-center",
           collapsed ? "justify-center" : ""
         )}>
-          <Logo size="sm" showText={!collapsed} />
+          <Logo size="md" showText={!collapsed} />
         </div>
 
         {/* Admin Info */}

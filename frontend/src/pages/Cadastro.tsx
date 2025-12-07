@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ export default function Cadastro() {
     password: '',
     confirmPassword: ''
   });
+  
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -28,6 +29,7 @@ export default function Cadastro() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validações Básicas Frontend
     if (!formData.name || !formData.email || !formData.birthDate || !formData.password) {
       toast({
         title: "Campos obrigatórios",
@@ -57,28 +59,38 @@ export default function Cadastro() {
 
     setLoading(true);
 
-    const success = register(
-      formData.name,
-      formData.email,
-      formData.password,
-      formData.birthDate
-    );
+    try {
+      const success = await register(
+        formData.name,
+        formData.email,
+        formData.password,
+        formData.birthDate // O input type="date" já retorna YYYY-MM-DD
+      );
 
-    if (success) {
+      if (success) {
+        toast({
+          title: "Conta criada com sucesso!",
+          description: "Bem-vindo ao Dice Play. Vamos configurar seus perfis."
+        });
+        // O AuthContext já atualiza o User, então o redirecionamento pode ser manual aqui
+        // ou você pode confiar em um useEffect similar ao do Login.
+        navigate('/perfis');
+      } else {
+        toast({
+          title: "Erro ao cadastrar",
+          description: "Este email já está em uso ou os dados são inválidos.",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
       toast({
-        title: "Conta criada!",
-        description: "Bem-vindo ao Dice Play!"
-      });
-      navigate('/perfis');
-    } else {
-      toast({
-        title: "Email já cadastrado",
-        description: "Tente fazer login ou use outro email.",
+        title: "Erro inesperado",
+        description: "Ocorreu um erro ao tentar criar sua conta.",
         variant: "destructive"
       });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
@@ -96,9 +108,9 @@ export default function Cadastro() {
           <ThemeToggle />
         </div>
 
-        {/* Form */}
+        {/* Form Container */}
         <div className="flex-1 flex items-center justify-center">
-          <div className="w-full max-w-md space-y-8 animate-slide-up">
+          <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="text-center">
               <h1 className="font-display text-4xl mb-2">Criar Conta</h1>
               <p className="text-muted-foreground">
@@ -106,7 +118,7 @@ export default function Cadastro() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="name">Nome Completo</Label>
                 <Input
@@ -115,6 +127,7 @@ export default function Cadastro() {
                   placeholder="Seu nome"
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  disabled={loading}
                 />
               </div>
 
@@ -125,6 +138,7 @@ export default function Cadastro() {
                   type="date"
                   value={formData.birthDate}
                   onChange={e => setFormData({ ...formData, birthDate: e.target.value })}
+                  disabled={loading}
                 />
               </div>
 
@@ -136,6 +150,7 @@ export default function Cadastro() {
                   placeholder="seu@email.com"
                   value={formData.email}
                   onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  disabled={loading}
                 />
               </div>
 
@@ -148,11 +163,13 @@ export default function Cadastro() {
                     placeholder="••••••••"
                     value={formData.password}
                     onChange={e => setFormData({ ...formData, password: e.target.value })}
+                    disabled={loading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    disabled={loading}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -168,11 +185,13 @@ export default function Cadastro() {
                     placeholder="••••••••"
                     value={formData.confirmPassword}
                     onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    disabled={loading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    disabled={loading}
                   >
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -180,13 +199,20 @@ export default function Cadastro() {
               </div>
 
               <Button type="submit" className="w-full" size="lg" disabled={loading}>
-                {loading ? 'Cadastrando...' : 'Cadastrar'}
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Cadastrando...
+                  </>
+                ) : (
+                  'Cadastrar'
+                )}
               </Button>
             </form>
 
             <p className="text-center text-muted-foreground">
               Já tem uma conta?{' '}
-              <Link to="/login" className="text-primary hover:underline">
+              <Link to="/login" className="text-primary hover:underline font-medium">
                 Faça login
               </Link>
             </p>
@@ -194,11 +220,11 @@ export default function Cadastro() {
         </div>
       </div>
 
-      {/* Right - Image */}
+      {/* Right - Image (Escondido em Mobile) */}
       <div className="hidden lg:block flex-1 relative">
         <img 
           src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&h=1600&fit=crop"
-          alt="RPG"
+          alt="RPG Adventure"
           className="absolute inset-0 w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-background to-transparent" />

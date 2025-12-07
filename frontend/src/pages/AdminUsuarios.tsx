@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Eye, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, User as UserIcon, Loader2 } from 'lucide-react';
 import { AdminSidebar } from '@/components/AdminSidebar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { useAuth, User as UserType, Profile } from '@/contexts/AuthContext';
+import { useAuth, Profile } from '@/contexts/AuthContext'; // Importe Profile se precisar tipar
 import {
   Dialog,
   DialogContent,
@@ -15,17 +15,24 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import api from '@/services/api'; // Importando a API
 
 const ITEMS_PER_PAGE = 8;
 
-interface StoredUser extends UserType {
-  password: string;
-  blocked?: boolean;
+// Interface baseada no retorno do Laravel
+interface StoredUser {
+  id: number;
+  name: string;
+  email: string;
+  birth_date: string;
+  account_status: '0' | '1';
+  is_admin: '0' | '1';
+  profiles?: Profile[];
 }
 
 export default function AdminUsuarios() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const { toast } = useToast();
 
   const [search, setSearch] = useState('');
@@ -33,18 +40,43 @@ export default function AdminUsuarios() {
   const [selectedUser, setSelectedUser] = useState<StoredUser | null>(null);
   const [users, setUsers] = useState<StoredUser[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
+  // 1. CORREÇÃO DE SEGURANÇA: Redirecionamento dentro do useEffect
   useEffect(() => {
-    loadUsers();
-  }, []);
+    if (!isLoading) {
+      if (!user || user.is_admin !== '1') {
+        navigate('/login');
+      }
+    }
+  }, [user, isLoading, navigate]);
 
-  const loadUsers = () => {
-    const storedUsers = JSON.parse(localStorage.getItem('diceplay_users') || '[]');
-    setUsers(storedUsers.filter((u: StoredUser) => u.type !== 'admin'));
+  // 2. CARREGAMENTO DA API
+  useEffect(() => {
+    if (user?.is_admin === '1') {
+      loadUsers();
+    }
+  }, [user]);
+
+  const loadUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      // Nota: Você precisará criar a rota Route::get('/users', ...) no Laravel depois
+      const response = await api.get('/users'); 
+      // Filtra para não mostrar o próprio admin ou admins em geral, se desejar
+      const allUsers = response.data;
+      setUsers(allUsers);
+    } catch (error) {
+      console.error("Erro ao carregar usuários", error);
+      // Fallback vazio se a API falhar
+      setUsers([]); 
+    } finally {
+      setIsLoadingUsers(false);
+    }
   };
 
-  if (!user || user.type !== 'admin') {
-    navigate('/login');
+  // Se estiver carregando auth ou não for admin, não renderiza nada
+  if (isLoading || !user || user.is_admin !== '1') {
     return null;
   }
 
@@ -63,29 +95,36 @@ export default function AdminUsuarios() {
     currentPage * ITEMS_PER_PAGE
   );
 
-  const toggleUserBlocked = (userId: string) => {
-    const storedUsers = JSON.parse(localStorage.getItem('diceplay_users') || '[]');
-    const userIndex = storedUsers.findIndex((u: StoredUser) => u.id === userId);
-    
-    if (userIndex !== -1) {
-      storedUsers[userIndex].blocked = !storedUsers[userIndex].blocked;
-      localStorage.setItem('diceplay_users', JSON.stringify(storedUsers));
-      loadUsers();
-      
-      toast({
-        title: storedUsers[userIndex].blocked ? "Usuário bloqueado" : "Usuário desbloqueado",
-        description: `${storedUsers[userIndex].name} foi ${storedUsers[userIndex].blocked ? 'bloqueado' : 'desbloqueado'} com sucesso.`
-      });
+  const toggleUserBlocked = async (userId: number, currentStatus: '0' | '1') => {
+    try {
+        const newStatus = currentStatus === '1' ? '0' : '1';
+        // Chamada para API do Laravel
+        await api.patch(`/users/${userId}/toggle-status`, { status: newStatus });
+        
+        // Atualiza lista localmente
+        setUsers(prev => prev.map(u => 
+            u.id === userId ? { ...u, account_status: newStatus } : u
+        ));
+
+        toast({
+            title: newStatus === '0' ? "Usuário bloqueado" : "Usuário desbloqueado",
+            description: "Status atualizado com sucesso."
+        });
+    } catch (error) {
+        toast({
+            title: "Erro",
+            description: "Não foi possível alterar o status.",
+            variant: "destructive"
+        });
     }
   };
 
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case 'infantil': return 'Infantil (0-11)';
-      case 'juvenil': return 'Juvenil (12-17)';
-      case 'adulto': return 'Adulto (18+)';
-      default: return type;
-    }
+  const getTypeLabel = (birthDate: string) => {
+    // Calculo simples de idade baseado na data
+    const age = new Date().getFullYear() - new Date(birthDate).getFullYear();
+    if (age < 12) return 'Infantil (0-11)';
+    if (age < 18) return 'Juvenil (12-17)';
+    return 'Adulto (18+)';
   };
 
   return (
@@ -124,9 +163,13 @@ export default function AdminUsuarios() {
 
         {/* Users Grid */}
         <div className="p-4 sm:p-6">
-          {paginatedUsers.length === 0 ? (
+          {isLoadingUsers ? (
+             <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+             </div>
+          ) : paginatedUsers.length === 0 ? (
             <div className="text-center py-12">
-              <User className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <UserIcon className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
                 {search ? 'Nenhum usuário encontrado' : 'Nenhum usuário cadastrado'}
               </p>
@@ -140,13 +183,13 @@ export default function AdminUsuarios() {
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                      <User className="w-6 h-6 text-primary" />
+                      <UserIcon className="w-6 h-6 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium truncate">{u.name}</h3>
                       <p className="text-sm text-muted-foreground truncate">{u.email}</p>
                       <Badge variant="secondary" className="text-xs mt-1">
-                        {getTypeLabel(u.type)}
+                        {getTypeLabel(u.birth_date)}
                       </Badge>
                     </div>
                   </div>
@@ -154,11 +197,11 @@ export default function AdminUsuarios() {
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
                     <div className="flex items-center gap-2">
                       <Switch
-                        checked={!u.blocked}
-                        onCheckedChange={() => toggleUserBlocked(u.id)}
+                        checked={u.account_status === '1'}
+                        onCheckedChange={() => toggleUserBlocked(u.id, u.account_status)}
                       />
-                      <span className={`text-xs ${u.blocked ? 'text-destructive' : 'text-green-500'}`}>
-                        {u.blocked ? 'Bloqueado' : 'Ativo'}
+                      <span className={`text-xs ${u.account_status === '0' ? 'text-destructive' : 'text-green-500'}`}>
+                        {u.account_status === '0' ? 'Bloqueado' : 'Ativo'}
                       </span>
                     </div>
                     <Button 
@@ -212,7 +255,7 @@ export default function AdminUsuarios() {
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-                  <User className="w-8 h-8 text-primary" />
+                  <UserIcon className="w-8 h-8 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-display text-xl">{selectedUser.name}</h3>
@@ -223,16 +266,16 @@ export default function AdminUsuarios() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Tipo:</span>
-                  <p className="font-medium">{getTypeLabel(selectedUser.type)}</p>
+                  <p className="font-medium">{getTypeLabel(selectedUser.birth_date)}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Nascimento:</span>
-                  <p className="font-medium">{new Date(selectedUser.birthDate).toLocaleDateString('pt-BR')}</p>
+                  <p className="font-medium">{new Date(selectedUser.birth_date).toLocaleDateString('pt-BR')}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Status:</span>
-                  <p className={`font-medium ${selectedUser.blocked ? 'text-destructive' : 'text-green-500'}`}>
-                    {selectedUser.blocked ? 'Bloqueado' : 'Ativo'}
+                  <p className={`font-medium ${selectedUser.account_status === '0' ? 'text-destructive' : 'text-green-500'}`}>
+                    {selectedUser.account_status === '0' ? 'Bloqueado' : 'Ativo'}
                   </p>
                 </div>
                 <div>
@@ -247,7 +290,7 @@ export default function AdminUsuarios() {
                   <div className="space-y-2">
                     {selectedUser.profiles.map((profile: Profile) => (
                       <div 
-                        key={profile.id}
+                        key={profile.id || profile.pk_perfil}
                         className="flex items-center gap-3 p-2 rounded-lg bg-muted/50"
                       >
                         <img 
