@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('password');
             $table->date('birth_date');
             $table->enum('account_status', ['1', '0'])->default('1');
+            $table->enum('is_admin', ['1', '0'])->default('0');
             $table->rememberToken();
             $table->timestamps();
         });
