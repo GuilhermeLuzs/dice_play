@@ -1,0 +1,64 @@
+{
+  "avatars": [
+    {
+      "id": "1",
+      "url": "https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&h=200&fit=crop",
+      "name": "Guerreiro"
+    },
+    {
+      "id": "2",
+      "url": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop",
+      "name": "Mago"
+    },
+    {
+      "id": "3",
+      "url": "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&h=200&fit=crop",
+      "name": "Arqueira"
+    },
+    {
+      "id": "4",
+      "url": "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=200&h=200&fit=crop",
+      "name": "Bárbaro"
+    },
+    {
+      "id": "5",
+      "url": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop",
+      "name": "Clériga"
+    },
+    {
+      "id": "6",
+      "url": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop",
+      "name": "Ladino"
+    },
+    {
+      "id": "7",
+      "url": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop",
+      "name": "Paladina"
+    },
+    {
+      "id": "8",
+      "url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop",
+      "name": "Druida"
+    },
+    {
+      "id": "9",
+      "url": "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=200&h=200&fit=crop",
+      "name": "Bardo"
+    },
+    {
+      "id": "10",
+      "url": "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop",
+      "name": "Monge"
+    },
+    {
+      "id": "11",
+      "url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop",
+      "name": "Feiticeiro"
+    },
+    {
+      "id": "12",
+      "url": "https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=200&h=200&fit=crop",
+      "name": "Ranger"
+    }
+  ]
+}
