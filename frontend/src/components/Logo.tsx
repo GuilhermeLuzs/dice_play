@@ -19,7 +19,7 @@ export function Logo({ size = 'md', showText = true }: LogoProps) {
   };
 
   return (
-    <Link to="/" className="flex items-center gap-2 group">
+    <Link to="/" className="flex items-center gap-2 group justify-center">
       {showText ? (
         <span 
           className={`font-display ${textSizes[size]} tracking-wider flex items-center`}

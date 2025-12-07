@@ -85,7 +85,7 @@ export default function Login() {
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
-          <Logo size="sm" />
+          <Logo size="md" />
           <ThemeToggle />
         </div>
 

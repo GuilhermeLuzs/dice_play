@@ -52,8 +52,8 @@ export function CatalogSidebar() {
         </button>
 
         {/* Header */}
-        <div className="p-4 border-b border-sidebar-border">
-          <Logo size="sm" showText={!collapsed} />
+        <div className="p-4 border-b border-sidebar-border d-flex items-center justify-center">
+          <Logo size="md" showText={!collapsed} />
         </div>
 
         {/* Profile */}
