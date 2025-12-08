@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { PerfilProvider } from '@/contexts/PerfilContext';
 import { VideoProvider } from "@/contexts/VideoContext";
 import { PrivateRoute } from "@/components/PrivateRoute";
 
@@ -27,44 +28,46 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
       <AuthProvider>
-        <VideoProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            {/* ATUALIZAÇÃO AQUI: Adicionar as flags futuras */}
-            <BrowserRouter
-              future={{
-                v7_startTransition: true,
-                v7_relativeSplatPath: true,
-              }}
-            >
-              <Routes>
-                {/* --- ROTAS PÚBLICAS --- */}
-                <Route path="/" element={<Index />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/cadastro" element={<Cadastro />} />
+        <PerfilProvider>
+          <VideoProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              {/* ATUALIZAÇÃO AQUI: Adicionar as flags futuras */}
+              <BrowserRouter
+                future={{
+                  v7_startTransition: true,
+                  v7_relativeSplatPath: true,
+                }}
+              >
+                <Routes>
+                  {/* --- ROTAS PÚBLICAS --- */}
+                  <Route path="/" element={<Index />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/cadastro" element={<Cadastro />} />
 
-                {/* --- ROTAS PRIVADAS --- */}
-                <Route element={<PrivateRoute />}>
-                  <Route path="/perfis" element={<Perfis />} />
-                  <Route path="/catalogo" element={<Catalogo />} />
-                  <Route path="/favoritos" element={<Favoritos />} />
-                  <Route path="/assistindo" element={<Assistindo />} />
-                  <Route path="/perfil" element={<PerfilConfig />} />
-                </Route>
+                  {/* --- ROTAS PRIVADAS --- */}
+                  <Route element={<PrivateRoute />}>
+                    <Route path="/perfis" element={<Perfis />} />
+                    <Route path="/catalogo" element={<Catalogo />} />
+                    <Route path="/favoritos" element={<Favoritos />} />
+                    <Route path="/assistindo" element={<Assistindo />} />
+                    <Route path="/perfil" element={<PerfilConfig />} />
+                  </Route>
 
-                {/* --- ROTAS DE ADMIN --- */}
-                <Route element={<PrivateRoute adminOnly={true} />}>
-                  <Route path="/admin/videos" element={<AdminVideos />} />
-                  <Route path="/admin/usuarios" element={<AdminUsuarios />} />
-                  <Route path="/admin" element={<Navigate to="/admin/videos" replace />} />
-                </Route>
+                  {/* --- ROTAS DE ADMIN --- */}
+                  <Route element={<PrivateRoute adminOnly={true} />}>
+                    <Route path="/admin/videos" element={<AdminVideos />} />
+                    <Route path="/admin/usuarios" element={<AdminUsuarios />} />
+                    <Route path="/admin" element={<Navigate to="/admin/videos" replace />} />
+                  </Route>
 
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </VideoProvider>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </VideoProvider>
+        </PerfilProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
