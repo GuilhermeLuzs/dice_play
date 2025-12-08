@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { useAuth, Profile } from '@/contexts/AuthContext'; // Importe Profile se precisar tipar
+import { useAuth, Profile } from '@/contexts/AuthContext';
 import {
   Dialog,
   DialogContent,
@@ -15,11 +15,10 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import api from '@/services/api'; // Importando a API
+import api from '@/services/api';
 
 const ITEMS_PER_PAGE = 8;
 
-// Interface baseada no retorno do Laravel
 interface StoredUser {
   id: number;
   name: string;
@@ -28,6 +27,7 @@ interface StoredUser {
   account_status: '0' | '1';
   is_admin: '0' | '1';
   profiles?: Profile[];
+  perfis?: Profile[];
 }
 
 export default function AdminUsuarios() {
@@ -42,7 +42,6 @@ export default function AdminUsuarios() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
-  // 1. CORREÇÃO DE SEGURANÇA: Redirecionamento dentro do useEffect
   useEffect(() => {
     if (!isLoading) {
       if (!user || user.is_admin !== '1') {
@@ -51,7 +50,6 @@ export default function AdminUsuarios() {
     }
   }, [user, isLoading, navigate]);
 
-  // 2. CARREGAMENTO DA API
   useEffect(() => {
     if (user?.is_admin === '1') {
       loadUsers();
@@ -61,21 +59,24 @@ export default function AdminUsuarios() {
   const loadUsers = async () => {
     setIsLoadingUsers(true);
     try {
-      // Nota: Você precisará criar a rota Route::get('/users', ...) no Laravel depois
-      const response = await api.get('/users'); 
-      // Filtra para não mostrar o próprio admin ou admins em geral, se desejar
-      const allUsers = response.data;
-      setUsers(allUsers);
+      const response = await api.get('/users');
+      const mappedUsers = response.data.map((u: StoredUser) => ({
+        ...u,
+        profiles: u.profiles || u.perfis || []
+      }));
+      setUsers(mappedUsers);
     } catch (error) {
       console.error("Erro ao carregar usuários", error);
-      // Fallback vazio se a API falhar
-      setUsers([]); 
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar a lista de usuários.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoadingUsers(false);
     }
   };
 
-  // Se estiver carregando auth ou não for admin, não renderiza nada
   if (isLoading || !user || user.is_admin !== '1') {
     return null;
   }
@@ -96,21 +97,21 @@ export default function AdminUsuarios() {
   );
 
   const toggleUserBlocked = async (userId: number, currentStatus: '0' | '1') => {
-    try {
-        const newStatus = currentStatus === '1' ? '0' : '1';
-        // Chamada para API do Laravel
-        await api.patch(`/users/${userId}/toggle-status`, { status: newStatus });
-        
-        // Atualiza lista localmente
-        setUsers(prev => prev.map(u => 
-            u.id === userId ? { ...u, account_status: newStatus } : u
-        ));
+    const newStatus = currentStatus === '1' ? '0' : '1';
+    setUsers(prev => prev.map(u => 
+        u.id === userId ? { ...u, account_status: newStatus } : u
+    ));
 
+    try {
+        await api.patch(`/users/${userId}/toggle-status`, { status: newStatus });
         toast({
             title: newStatus === '0' ? "Usuário bloqueado" : "Usuário desbloqueado",
             description: "Status atualizado com sucesso."
         });
     } catch (error) {
+        setUsers(prev => prev.map(u => 
+            u.id === userId ? { ...u, account_status: currentStatus } : u
+        ));
         toast({
             title: "Erro",
             description: "Não foi possível alterar o status.",
@@ -120,23 +121,30 @@ export default function AdminUsuarios() {
   };
 
   const getTypeLabel = (birthDate: string) => {
-    // Calculo simples de idade baseado na data
     const age = new Date().getFullYear() - new Date(birthDate).getFullYear();
-    if (age < 12) return 'Infantil (0-11)';
-    if (age < 18) return 'Juvenil (12-17)';
-    return 'Adulto (18+)';
+    if (age < 12) return 'Infantil';
+    if (age < 18) return 'Juvenil';
+    return 'Adulto';
+  };
+
+  // --- NOVA FUNÇÃO PARA CORRIGIR A DATA ---
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
+    // Pega apenas a parte da data (YYYY-MM-DD) caso venha com tempo
+    const datePart = dateString.split('T')[0];
+    // Divide manualmente e remonta
+    const [year, month, day] = datePart.split('-');
+    return `${day}/${month}/${year}`;
   };
 
   return (
     <div className="min-h-screen bg-background flex w-full">
       <AdminSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
       
-      {/* Main Content */}
       <main className={cn(
         "flex-1 pt-16 lg:pt-0 transition-all duration-300",
         sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"
       )}>
-        {/* Header */}
         <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border p-4">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div>
@@ -161,17 +169,17 @@ export default function AdminUsuarios() {
           </div>
         </header>
 
-        {/* Users Grid */}
         <div className="p-4 sm:p-6">
           {isLoadingUsers ? (
-             <div className="flex justify-center py-12">
+             <div className="flex flex-col items-center justify-center py-12 gap-2">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-muted-foreground text-sm">Carregando usuários...</p>
              </div>
           ) : paginatedUsers.length === 0 ? (
             <div className="text-center py-12">
               <UserIcon className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
-                {search ? 'Nenhum usuário encontrado' : 'Nenhum usuário cadastrado'}
+                {search ? 'Nenhum usuário encontrado na busca' : 'Nenhum usuário cadastrado'}
               </p>
             </div>
           ) : (
@@ -186,8 +194,8 @@ export default function AdminUsuarios() {
                       <UserIcon className="w-6 h-6 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium truncate">{u.name}</h3>
-                      <p className="text-sm text-muted-foreground truncate">{u.email}</p>
+                      <h3 className="font-medium truncate" title={u.name}>{u.name}</h3>
+                      <p className="text-sm text-muted-foreground truncate" title={u.email}>{u.email}</p>
                       <Badge variant="secondary" className="text-xs mt-1">
                         {getTypeLabel(u.birth_date)}
                       </Badge>
@@ -218,8 +226,7 @@ export default function AdminUsuarios() {
             </div>
           )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
+          {!isLoadingUsers && totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-6">
               <Button
                 variant="outline"
@@ -245,7 +252,6 @@ export default function AdminUsuarios() {
         </div>
       </main>
 
-      {/* User Details Modal */}
       <Dialog open={!!selectedUser} onOpenChange={() => setSelectedUser(null)}>
         <DialogContent className="max-w-[90vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -270,7 +276,8 @@ export default function AdminUsuarios() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Nascimento:</span>
-                  <p className="font-medium">{new Date(selectedUser.birth_date).toLocaleDateString('pt-BR')}</p>
+                  {/* USO DA FUNÇÃO formatDate AQUI */}
+                  <p className="font-medium">{formatDate(selectedUser.birth_date)}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Status:</span>
@@ -284,14 +291,14 @@ export default function AdminUsuarios() {
                 </div>
               </div>
 
-              {selectedUser.profiles && selectedUser.profiles.length > 0 && (
+              {selectedUser.profiles && selectedUser.profiles.length > 0 ? (
                 <div>
-                  <h4 className="font-medium mb-2">Perfis</h4>
-                  <div className="space-y-2">
+                  <h4 className="font-medium mb-2">Perfis Cadastrados</h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
                     {selectedUser.profiles.map((profile: Profile) => (
                       <div 
                         key={profile.id || profile.pk_perfil}
-                        className="flex items-center gap-3 p-2 rounded-lg bg-muted/50"
+                        className="flex items-center gap-3 p-2 rounded-lg bg-muted/50 border border-transparent hover:border-border transition-colors"
                       >
                         <img 
                           src={profile.avatar} 
@@ -306,6 +313,11 @@ export default function AdminUsuarios() {
                     ))}
                   </div>
                 </div>
+              ) : (
+                 <div>
+                    <h4 className="font-medium mb-2">Perfis</h4>
+                    <p className="text-sm text-muted-foreground italic">Nenhum perfil criado.</p>
+                 </div>
               )}
             </div>
           )}
