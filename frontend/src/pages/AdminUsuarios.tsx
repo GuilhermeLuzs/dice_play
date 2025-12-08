@@ -103,7 +103,7 @@ export default function AdminUsuarios() {
     ));
 
     try {
-        await api.patch(`/users/${userId}/toggle-status`, { status: newStatus });
+        await api.patch(`/users/${userId}/alterar-status`, { status: newStatus });
         toast({
             title: newStatus === '0' ? "Usuário bloqueado" : "Usuário desbloqueado",
             description: "Status atualizado com sucesso."
