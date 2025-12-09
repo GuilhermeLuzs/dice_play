@@ -35,12 +35,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/videos/youtube-info', [VideoController::class, 'buscarDadosYoutube']); // Botão "Buscar Dados"
     Route::get('/tags', [VideoController::class, 'listarTags']); // Popula o select
 
+    Route::get('/videos/filtros', [VideoController::class, 'listarFiltros']);
+    Route::post('/videos/favoritar/{id_video}', [VideoController::class, 'favoritarVideo']);
+    Route::get('/videos/favoritos', [VideoController::class, 'listarFavoritos']);
+    Route::post('/videos/assistir/{id_video}', [VideoController::class, 'assistirVideo']);
+    Route::get('/videos/assistindo', [VideoController::class, 'listarAssistindo']);
+
     // --- Rotas Exclusivas de Admin ---
     Route::middleware('admin')->group(function () {
         // Estas rotas exigem que o usuário esteja logado E seja Admin.
 
-        Route::post('/videos', [VideoController::class, 'adicionarVideo']); // Salvar final (AQUI!)
-        Route::get('/videos', [VideoController::class, 'listarVideos']);
+        Route::post('/videos', [VideoController::class, 'adicionarVideo']);
+        Route::get('/videos', [VideoController::class, 'listarVideosAdm']);
+
+
 
 
         Route::get('/users', [UserController::class, 'listarUsuarios']);
