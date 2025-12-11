@@ -5,9 +5,7 @@ import api from '@/services/api';
 // --- Interfaces ---
 export interface Avatar {
   pk_avatar: number;
-  nome_avatar: string;
-  url_avatar: string;
-  descricao_avatar?: string;
+  img_avatar: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -87,7 +85,7 @@ export function PerfilProvider({ children }: { children: ReactNode }) {
       id: perfil.pk_perfil.toString(),
       name: perfil.nome_perfil,
       birthDate: perfil.data_nascimento_perfil,
-      avatar: perfil.avatar?.url_avatar || '',
+      avatar: perfil.avatar?.img_avatar || '',
       type: tipo,
       fk_avatar: perfil.fk_avatar,
       fk_tipo_perfil: perfil.fk_tipo_perfil

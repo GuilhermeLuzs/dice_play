@@ -7,6 +7,7 @@ import { VideoDetailsModal } from '@/components/VideoDetailsModal';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVideos, Video } from '@/contexts/VideoContext';
+import { cn } from '@/lib/utils'; // 1. Importar cn
 
 export default function Favoritos() {
   const navigate = useNavigate();
@@ -15,6 +16,9 @@ export default function Favoritos() {
   
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
+  
+  // 2. Estado da Sidebar
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   if (!user) {
     navigate('/login');
@@ -30,9 +34,14 @@ export default function Favoritos() {
 
   return (
     <div className="min-h-screen bg-background">
-      <CatalogSidebar />
+      {/* 3. Passar controle para a Sidebar */}
+      <CatalogSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
       
-      <main className="pt-16 lg:pt-0 lg:ml-20 xl:ml-64 transition-all duration-300">
+      {/* 4. Ajustar a margem dinamicamente */}
+      <main className={cn(
+        "pt-16 lg:pt-0 transition-all duration-300",
+        sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"
+      )}>
         {/* Header */}
         <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-sm border-b border-border p-6">
           <div className="flex items-center gap-3">

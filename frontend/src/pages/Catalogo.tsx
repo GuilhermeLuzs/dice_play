@@ -26,7 +26,10 @@ export default function Catalogo() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
+  
+  // Este estado agora controla a Sidebar DE VERDADE
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
   const [filterOpen, setFilterOpen] = useState(false);
 
   // Redirecionamentos de segurança
@@ -77,18 +80,18 @@ export default function Catalogo() {
   };
 
   return (
-    // CORREÇÃO: Removido overflow-x-hidden e relative daqui para o sticky funcionar
     <div className="min-h-screen bg-background flex w-full">
+      {/* Agora a Sidebar recebe e respeita o estado */}
       <CatalogSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
       
       {/* Main Content */}
       <main className={cn(
         "flex-1 min-w-0 transition-all duration-300",
+        // A margem esquerda agora reage corretamente ao estado sidebarCollapsed
         sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"
       )}>
         
-        {/* Header - Sticky restaurado */}
-        {/* z-40 garante que fique acima do carousel, mas abaixo de modais (z-50) */}
+        {/* Header */}
         <header className="sticky top-0 z-40 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border shadow-sm">
           <div className="p-4 w-full">
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between w-full">
@@ -230,7 +233,7 @@ export default function Catalogo() {
                       <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
                         <img 
                           src={video.thumbnail} 
-                          alt={video.title}
+                          alt={video.title} 
                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                           loading="lazy"
                         />

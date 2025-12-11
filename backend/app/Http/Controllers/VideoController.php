@@ -27,7 +27,7 @@ class VideoController extends Controller
     {
         $request->validate(['link' => 'required|url']);
 
-        $apiKey = env('YOUTUBE_API_KEY');
+        $apiKey = config('services.youtube.key');
         $videoId = $this->extrairIdYoutube($request->link);
 
         if (!$videoId) {
@@ -40,6 +40,16 @@ class VideoController extends Controller
             'id' => $videoId,
             'key' => $apiKey
         ]);
+
+        if ($videoResponse->failed()) {
+            return response()->json([
+                'status_erro' => 'O Google recusou a conexão',
+                'codigo_http' => $videoResponse->status(),
+                'resposta_google' => $videoResponse->json(), // AQUI ESTÁ O OURO
+                'chave_que_o_laravel_usou' => $apiKey, // Confira se bate com a do navegador
+                'id_buscado' => $videoId
+            ], 400);
+        }
 
         $videoData = $videoResponse->json()['items'][0] ?? null;
 
@@ -347,7 +357,7 @@ class VideoController extends Controller
 
             // Verificar se o perfil pertence ao usuário
             $perfil = $user->perfis()->where('pk_perfil', $fk_perfil)->first();
-            
+
             if (!$perfil) {
                 return response()->json(['message' => 'Perfil não encontrado ou não pertence a você.'], 403);
             }
@@ -366,8 +376,8 @@ class VideoController extends Controller
             if (!empty($search)) {
                 $query->where(function ($q) use ($search) {
                     $q->where('videos.titulo_video', 'LIKE', "%{$search}%")
-                      ->orWhere('videos.descricao_video', 'LIKE', "%{$search}%")
-                      ->orWhere('videos.nome_canal_video', 'LIKE', "%{$search}%");
+                        ->orWhere('videos.descricao_video', 'LIKE', "%{$search}%")
+                        ->orWhere('videos.nome_canal_video', 'LIKE', "%{$search}%");
                 });
             }
 
@@ -403,13 +413,11 @@ class VideoController extends Controller
             ];
 
             return response()->json($response, 200);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'message' => 'Erro de validação.',
                 'errors' => $e->errors()
             ], 422);
-            
         } catch (Exception $e) {
             return response()->json([
                 'message' => 'Ocorreu um erro interno ao listar os favoritos.',
@@ -418,9 +426,7 @@ class VideoController extends Controller
         }
     }
 
-    public function atualizarMinutagem(Request $request, $id_video_perfil){
-
-    }
+    public function atualizarMinutagem(Request $request, $id_video_perfil) {}
 
     // --- Helpers Privados ---
 
