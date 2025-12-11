@@ -1,14 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import api from '@/services/api';
 
-// Interface para o Perfil
+// Interface para o Perfil (Frontend)
 export interface Profile {
+  id: string; 
   pk_perfil?: number;
-  id?: string; // Mantido para compatibilidade com código antigo
   name: string;
   avatar: string;
   birthDate: string;
-  type: 'infantil' | 'juvenil' | 'adulto';
+  type: string;
+  fk_avatar?: number;
+  fk_tipo_perfil?: number;
 }
 
 // Interface para o Usuário
@@ -19,8 +21,6 @@ export interface User {
   birth_date: string;
   account_status: '0' | '1';
   is_admin: '0' | '1';
-  profiles?: Profile[]; // O frontend usa 'profiles'
-  perfis?: Profile[];   // O backend manda 'perfis'
 }
 
 interface AuthContextType {
@@ -33,31 +33,17 @@ interface AuthContextType {
   logout: () => void;
   selectProfile: (profile: Profile) => void;
   clearCurrentProfile: () => void;
-  addProfile: (name: string, avatar: string, birthDate: string) => Promise<boolean>;
-  updateProfile: (profileId: string, updates: Partial<Profile>) => void;
-  deleteProfile: (profileId: string) => void;
+  // MÉTODOS CRUD REMOVIDOS DAQUI - AGORA FICAM NO usePerfis()
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-function getUserType(birthDate: string): 'infantil' | 'juvenil' | 'adulto' {
-  const today = new Date();
-  const birth = new Date(birthDate);
-  let age = today.getFullYear() - birth.getFullYear();
-  if (today < new Date(today.getFullYear(), birth.getMonth(), birth.getDate())) {
-    age--;
-  }
-  if (age < 12) return 'infantil';
-  if (age < 18) return 'juvenil';
-  return 'adulto';
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- 1. VERIFICAÇÃO INICIAL (Carregar Token) ---
+  // --- 1. VERIFICAÇÃO INICIAL ---
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('diceplay_token');
@@ -65,23 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) {
         try {
           const response = await api.get('/me');
-          const backendUser = response.data;
-
-          // CORREÇÃO: Mapeia 'perfis' do backend para 'profiles' do frontend
-          // Se vier nulo, define como array vazio []
-          const formattedUser: User = {
-            ...backendUser,
-            profiles: backendUser.perfis || [] 
-          };
-
-          setUser(formattedUser);
+          setUser(response.data); // Salva dados do usuário
           
           const storedProfile = localStorage.getItem('diceplay_current_profile');
           if (storedProfile) {
             setCurrentProfile(JSON.parse(storedProfile));
           }
         } catch (error) {
-          console.error("Sessão expirada ou inválida");
+          console.error("Sessão expirada");
           logout();
         }
       }
@@ -95,23 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<boolean | 'blocked'> => {
     try {
       const response = await api.post('/login', { email, password });
-      
       const { access_token, user: backendUser } = response.data;
       
-      // CORREÇÃO: Mapeia perfis -> profiles e garante array
-      const userData: User = {
-        ...backendUser,
-        profiles: backendUser.perfis || []
-      };
-      
       localStorage.setItem('diceplay_token', access_token);
-      setUser(userData);
-      
+      setUser(backendUser);
       return true;
     } catch (error: any) {
-      if (error.response?.status === 403) {
-        return 'blocked';
-      }
+      if (error.response?.status === 403) return 'blocked';
       return false;
     }
   };
@@ -125,18 +92,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         birth_date: birthDate
       });
-
       const { access_token, user: backendUser } = response.data;
       
-      // CORREÇÃO: Usuário novo tem lista vazia
-      const userData: User = {
-        ...backendUser,
-        profiles: [] 
-      };
-      
       localStorage.setItem('diceplay_token', access_token);
-      setUser(userData);
-      
+      setUser(backendUser);
       return true;
     } catch (error) {
       return false;
@@ -144,11 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    try {
-        await api.post('/logout');
-    } catch (e) {
-        // Ignora erro
-    }
+    try { await api.post('/logout'); } catch (e) {}
     localStorage.removeItem('diceplay_token');
     localStorage.removeItem('diceplay_current_profile');
     setUser(null);
@@ -165,29 +120,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('diceplay_current_profile');
   };
 
-  // --- Mocks para Perfil (Ajustar quando criar backend de perfis) ---
-  const addProfile = async (name: string, avatar: string, birthDate: string) => {
-    if (!user) return false;
-    // Simulação visual: Adiciona localmente
-    const newProfile: any = { 
-        id: Date.now().toString(), 
-        name, 
-        avatar, 
-        birthDate, 
-        type: getUserType(birthDate) 
-    };
-    
-    // Atualiza estado garantindo que profiles existe
-    const currentProfiles = user.profiles || [];
-    const updatedUser = { ...user, profiles: [...currentProfiles, newProfile] };
-    
-    setUser(updatedUser);
-    return true;
-  };
-
-  const updateProfile = (profileId: string, updates: Partial<Profile>) => {};
-  const deleteProfile = (profileId: string) => {};
-
   return (
     <AuthContext.Provider value={{
       user,
@@ -198,10 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       selectProfile,
-      clearCurrentProfile,
-      addProfile,
-      updateProfile,
-      deleteProfile
+      clearCurrentProfile
     }}>
       {children}
     </AuthContext.Provider>

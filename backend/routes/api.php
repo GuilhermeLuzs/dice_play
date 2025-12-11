@@ -48,9 +48,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/videos', [VideoController::class, 'adicionarVideo']);
         Route::get('/videos', [VideoController::class, 'listarVideosAdm']);
 
-
-
-
         Route::get('/users', [UserController::class, 'listarUsuarios']);
         Route::get('/users/{id}', [UserController::class, 'detalhesUsuario']);
         Route::patch('/users/{id}/alterar-status', [UserController::class, 'alterarStatusUsuario']);
