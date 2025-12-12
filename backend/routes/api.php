@@ -48,6 +48,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/videos', [VideoController::class, 'adicionarVideo']);
         Route::get('/videos', [VideoController::class, 'listarVideosAdm']);
 
+        Route::get('/videos/{id}', [VideoController::class, 'detalhesVideo']); 
+        Route::put('/videos/{id}', [VideoController::class, 'editarVideo']);  
+        Route::delete('/videos/{id}', [VideoController::class, 'excluirVideo']);
+
         Route::get('/users', [UserController::class, 'listarUsuarios']);
         Route::get('/users/{id}', [UserController::class, 'detalhesUsuario']);
         Route::patch('/users/{id}/alterar-status', [UserController::class, 'alterarStatusUsuario']);
