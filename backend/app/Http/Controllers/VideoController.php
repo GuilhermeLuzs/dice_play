@@ -430,6 +430,144 @@ class VideoController extends Controller
 
     // --- Helpers Privados ---
 
+    // 1. Detalhes do Vídeo (GET /videos/{id})
+    public function detalhesVideo($id)
+    {
+        // Busca o vídeo com todos os relacionamentos necessários
+        $video = Video::with(['tags', 'participantes'])->find($id);
+
+        if (!$video) {
+            return response()->json(['message' => 'Vídeo não encontrado.'], 404);
+        }
+
+        return response()->json([
+            'message' => 'Detalhes do vídeo recuperados com sucesso.',
+            'video' => $video
+        ], 200);
+    }
+
+    // 2. Editar Vídeo (PUT /videos/{id})
+    public function editarVideo(Request $request, $id)
+    {
+        $video = Video::find($id);
+
+        if (!$video) {
+            return response()->json(['message' => 'Vídeo não encontrado.'], 404);
+        }
+
+        // Validação (campos podem ser opcionais na edição dependendo do front, mas aqui validamos o que chega)
+        $request->validate([
+            'link_video' => 'nullable|url',
+            'descricao_video' => 'nullable|string',
+            'classificacao_etaria_video' => 'nullable|string',
+            'tags' => 'array',
+            'master' => 'nullable|string',
+            'participantes' => 'array'
+        ]);
+
+        DB::beginTransaction();
+
+        try {
+            // Atualiza campos básicos do vídeo
+            // Usamos $request->only para pegar apenas o que foi enviado para edição
+            $video->update($request->only([
+                'link_video',
+                'descricao_video',
+                'classificacao_etaria_video'
+                // Título e Thumbnail geralmente não mudam na edição simples, mas podem ser adicionados se necessário
+            ]));
+
+            // Atualiza Tags
+            if ($request->has('tags')) {
+                $tagIds = [];
+                foreach ($request->tags as $tagName) {
+                    $tag = Tag::firstOrCreate(['nome_tag' => trim($tagName)]);
+                    $tagIds[] = $tag->pk_tag;
+                }
+                // Sync remove as tags antigas e deixa apenas as novas
+                $video->tags()->sync($tagIds);
+            }
+
+            // Atualiza Participantes (Mestre e Jogadores)
+            // Estratégia: Limpar os atuais e recriar, para evitar duplicidade ou lógica complexa de update
+            if ($request->has('master') || $request->has('participantes')) {
+                // Remove todos os participantes atuais deste vídeo
+                $video->participantes()->delete();
+
+                // Recria o Mestre
+                if ($request->filled('master')) {
+                    Participante::create([
+                        'nome_participante' => $request->master,
+                        'foto_participante' => '',
+                        'e_mestre_participante' => '1',
+                        'fk_video' => $video->pk_video
+                    ]);
+                }
+
+                // Recria os Jogadores
+                if ($request->has('participantes')) {
+                    foreach ($request->participantes as $jogadorNome) {
+                        if (!empty(trim($jogadorNome))) {
+                            Participante::create([
+                                'nome_participante' => $jogadorNome,
+                                'foto_participante' => '',
+                                'e_mestre_participante' => '0',
+                                'fk_video' => $video->pk_video
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+
+            // Retorna o vídeo atualizado com as relações recarregadas
+            return response()->json([
+                'message' => 'Vídeo atualizado com sucesso!',
+                'video' => $video->load(['tags', 'participantes'])
+            ], 200);
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Erro ao atualizar o vídeo.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // 3. Excluir Vídeo (DELETE /videos/{id})
+    public function excluirVideo($id)
+    {
+        $video = Video::find($id);
+
+        if (!$video) {
+            return response()->json(['message' => 'Vídeo não encontrado.'], 404);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            // Remove relacionamentos manualmente (caso o banco não tenha CASCADE configurado)
+            $video->tags()->detach();
+            $video->participantes()->delete();
+
+            // Se houver registros na tabela videos_perfis (histórico/favoritos), deve deletar também
+            // VideoPerfil::where('fk_video', $id)->delete();
+
+            $video->delete();
+
+            DB::commit();
+
+            return response()->json(['message' => 'Vídeo excluído com sucesso.'], 200);
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Erro ao excluir o vídeo. Verifique se existem dependências.',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     private function extrairIdYoutube($url)
     {
         // Regex poderosa para capturar ID de URLs completas, encurtadas (youtu.be) ou embed
