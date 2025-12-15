@@ -1,17 +1,44 @@
-import { Play, Heart, Clock } from 'lucide-react';
+import { Play, Heart } from 'lucide-react';
 import { useVideos, Video } from '@/contexts/VideoContext';
 import { cn } from '@/lib/utils';
+import { useMemo } from 'react';
 
 interface VideoCardProps {
   video: Video;
   onPlay: () => void;
   onDetails: () => void;
+  showFavorite?: boolean; // Prop opcional
 }
 
-export function VideoCard({ video, onPlay, onDetails }: VideoCardProps) {
+export function VideoCard({ video, onPlay, onDetails, showFavorite = true }: VideoCardProps) {
   const { toggleFavorite, isFavorite, getWatchProgress } = useVideos();
   const favorite = isFavorite(video.id);
-  const progress = getWatchProgress(video.id);
+  
+  // 1. Pega os segundos assistidos
+  const currentSeconds = getWatchProgress(video.id);
+
+  // 2. Converte a string de duração "HH:MM:SS" para segundos totais
+  const totalDurationSeconds = useMemo(() => {
+    if (!video.duration) return 0;
+    const parts = video.duration.split(':').map(Number);
+    
+    // Formato HH:MM:SS
+    if (parts.length === 3) {
+      return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+    }
+    // Formato MM:SS (fallback)
+    if (parts.length === 2) {
+      return (parts[0] * 60) + parts[1];
+    }
+    return 0;
+  }, [video.duration]);
+
+  // 3. Calcula a porcentagem real (0 a 100)
+  const percentage = useMemo(() => {
+    if (totalDurationSeconds === 0) return 0;
+    const pct = (currentSeconds / totalDurationSeconds) * 100;
+    return Math.min(100, Math.max(0, pct)); // Trava entre 0% e 100%
+  }, [currentSeconds, totalDurationSeconds]);
 
   const getRatingColor = (rating: string) => {
     if (rating === 'L') return 'bg-green-500';
@@ -53,11 +80,11 @@ export function VideoCard({ video, onPlay, onDetails }: VideoCardProps) {
         </div>
 
         {/* Progress Bar */}
-        {progress > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted">
+        {percentage > 0 && (
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/50">
             <div 
-              className="h-full bg-primary transition-all"
-              style={{ width: `${progress}%` }}
+              className="h-full bg-primary transition-all duration-300"
+              style={{ width: `${percentage}%` }}
             />
           </div>
         )}
@@ -82,20 +109,25 @@ export function VideoCard({ video, onPlay, onDetails }: VideoCardProps) {
           <h3 className="font-semibold text-sm line-clamp-2 text-card-foreground group-hover:text-primary transition-colors">
             {video.title}
           </h3>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavorite(video.id);
-            }}
-            className="flex-shrink-0 p-1 rounded-full hover:bg-muted transition-colors"
-          >
-            <Heart 
-              className={cn(
-                "w-4 h-4 transition-colors",
-                favorite ? "fill-primary text-primary" : "text-muted-foreground hover:text-primary"
-              )} 
-            />
-          </button>
+          
+          {/* BOTÃO DE FAVORITO CONDICIONAL */}
+          {showFavorite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(video.id);
+              }}
+              className="flex-shrink-0 p-1 rounded-full hover:bg-muted transition-colors"
+            >
+              <Heart 
+                className={cn(
+                  "w-4 h-4 transition-colors",
+                  favorite ? "fill-primary text-primary" : "text-muted-foreground hover:text-primary"
+                )} 
+              />
+            </button>
+          )}
+
         </div>
         
         <div className="flex items-center gap-2 mt-2">

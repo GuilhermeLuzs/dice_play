@@ -23,7 +23,7 @@ export default function Login() {
   useEffect(() => {
     if (isAuthenticated && user) {
       if (user.is_admin === '1') {
-        navigate('/admin/videos', { replace: true });
+        navigate('/admin/dashboard', { replace: true });
       } else {
         navigate('/perfis', { replace: true });
       }

@@ -1,4 +1,4 @@
-import { Video, Users, LogOut, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react';
+import { Video, Users, LogOut, ChevronLeft, ChevronRight, Menu, X, LayoutDashboard } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useState } from 'react';
 import { Logo } from './Logo';
@@ -17,6 +17,7 @@ export function AdminSidebar({ collapsed, onCollapsedChange }: AdminSidebarProps
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = [
+    { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/admin/videos', icon: Video, label: 'Vídeos' },
     { to: '/admin/usuarios', icon: Users, label: 'Usuários' },
   ];

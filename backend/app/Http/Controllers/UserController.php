@@ -14,7 +14,7 @@ class UserController extends Controller
         // Trazemos todos os usuários que NÃO são admins
         // Carregamos 'perfis' para evitar consultas extras (Eager Loading)
         $users = User::where('is_admin', '0')
-                    ->with('perfis')
+                    ->with('perfis.avatar')
                     ->orderBy('name')
                     ->get();
 
@@ -24,7 +24,7 @@ class UserController extends Controller
     // Detalhes de um usuário específico
     public function detalhesUsuario($id)
     {
-        $user = User::with('perfis')->findOrFail($id);
+        $user = User::with('perfis.avatar')->findOrFail($id);
         return response()->json($user);
     }
 
@@ -78,7 +78,7 @@ class UserController extends Controller
 
         return response()->json([
             'message' => 'Dados atualizados com sucesso.',
-            'user' => $user->load('perfis') // Retorna o user atualizado com perfis
+            'user' => $user->load('perfis.avatar') // Retorna o user atualizado com perfis
         ]);
     }
 }

@@ -192,12 +192,30 @@ class VideoController extends Controller
         }
     }
 
+    public function listarVideosPublico()
+    {
+        // Usuário logado (qualquer um) pode ver
+        // $user = Auth::user();
+        // if (!$user) return response()->json(['message' => 'Unauthenticated.'], 401);
+
+        // Retorna todos os vídeos com as relações necessárias para o Front montar os cards
+        $videos = Video::with(['tags', 'participantes'])->get();
+
+        return response()->json([
+            'videos' => $videos, // O front espera { videos: [...] }
+        ], 200);
+    }
+
     public function favoritarVideo(Request $request, $id_video)
     {
         $user = Auth::user();
 
         if (!$user) {
             return response()->json(['message' => 'Usuário não autenticado.'], 401);
+        }
+
+        if ($user->is_admin === '1') {
+            return response()->json(['message' => 'Administradores não podem favoritar vídeos.'], 403);
         }
 
         try {
@@ -263,69 +281,6 @@ class VideoController extends Controller
         } catch (Exception $e) {
             return response()->json([
                 'message' => 'Ocorreu um erro interno ao favoritar o vídeo.',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function assistirVideo(Request $request, $id_video)
-    {
-        $user = Auth::user();
-
-        if (!$user) {
-            return response()->json(['message' => 'Usuário não autenticado.'], 401);
-        }
-
-        try {
-            // Validar se o vídeo existe
-            $video = Video::find($id_video);
-
-            if (!$video) {
-                return response()->json(['message' => 'Vídeo não encontrado.'], 404);
-            }
-
-            // Validar se o perfil está na requisição
-            $request->validate([
-                'fk_perfil' => 'required|integer|exists:perfis,pk_perfil'
-            ]);
-
-            $fk_perfil = $request->input('fk_perfil');
-
-            // Verificar se o perfil pertence ao usuário
-            $perfil = $user->perfis()->where('pk_perfil', $fk_perfil)->first();
-
-            if (!$perfil) {
-                return response()->json(['message' => 'Perfil não encontrado ou não pertence a você.'], 403);
-            }
-
-            // Verificar se já existe um registro para este vídeo e perfil
-            $videoPerfil = VideoPerfil::where('fk_video', $id_video)
-                ->where('fk_perfil', $fk_perfil)
-                ->first();
-
-            if ($videoPerfil) {
-                // Se já existe, apenas retorna sucesso
-                return response()->json([
-                    'message' => 'Registro de visualização já existe.',
-                    'video_perfil' => $videoPerfil
-                ], 200);
-            }
-
-            // Criar novo registro
-            $novoVideoPerfil = VideoPerfil::create([
-                'fk_video' => $id_video,
-                'fk_perfil' => $fk_perfil,
-                'andamento_video_perfil' => '00:00:00',
-                'e_favorito_video_perfil' => '0'
-            ]);
-
-            return response()->json([
-                'message' => 'Registro de visualização criado com sucesso.',
-                'video_perfil' => $novoVideoPerfil
-            ], 201);
-        } catch (Exception $e) {
-            return response()->json([
-                'message' => 'Ocorreu um erro interno ao registrar a visualização.',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -425,10 +380,6 @@ class VideoController extends Controller
             ], 500);
         }
     }
-
-    public function atualizarMinutagem(Request $request, $id_video_perfil) {}
-
-    // --- Helpers Privados ---
 
     // 1. Detalhes do Vídeo (GET /videos/{id})
     public function detalhesVideo($id)
@@ -567,6 +518,111 @@ class VideoController extends Controller
             ], 500);
         }
     }
+
+
+
+
+    // 1. Iniciar visualização (POST /videos/assistir/{id})
+    public function assistirVideo(Request $request, $id_video)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthenticated.'], 401);
+
+        if ($user->is_admin === '1') {
+            return response()->json(['message' => 'Administradores não podem iniciar sessões de vídeo.'], 403);
+        }
+
+        $request->validate(['fk_perfil' => 'required|integer|exists:perfis,pk_perfil']);
+        $fk_perfil = $request->input('fk_perfil');
+
+        // Valida propriedade do perfil
+        $perfil = $user->perfis()->where('pk_perfil', $fk_perfil)->first();
+        if (!$perfil) return response()->json(['message' => 'Forbidden.'], 403);
+
+        // Busca ou cria o registro
+        $videoPerfil = VideoPerfil::firstOrCreate(
+            ['fk_video' => $id_video, 'fk_perfil' => $fk_perfil],
+            ['andamento_video_perfil' => '00:00:00', 'e_favorito_video_perfil' => '0']
+        );
+
+        // Converte H:i:s para segundos para o frontend
+        $segundos = $this->timeToSeconds($videoPerfil->andamento_video_perfil);
+
+        return response()->json([
+            'message' => 'Sessão iniciada.',
+            'progresso_segundos' => $segundos
+        ], 200);
+    }
+
+    // 2. Atualizar tempo (PUT /videos/progresso/{id})
+    public function atualizarMinutagem(Request $request, $id_video)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthenticated.'], 401);
+
+        if ($user->is_admin === '1') {
+            return response()->json(['message' => 'Administradores não podem salvar progresso.'], 403);
+        }
+
+        $request->validate([
+            'fk_perfil' => 'required|integer|exists:perfis,pk_perfil',
+            'tempo_atual' => 'required|numeric'
+        ]);
+
+        $fk_perfil = $request->input('fk_perfil');
+        $segundos = $request->input('tempo_atual');
+
+        $videoPerfil = VideoPerfil::where('fk_video', $id_video)
+            ->where('fk_perfil', $fk_perfil)
+            ->first();
+
+        if ($videoPerfil) {
+            // Converte segundos para H:i:s
+            $videoPerfil->andamento_video_perfil = gmdate("H:i:s", (int)$segundos);
+            $videoPerfil->updated_at = now(); // Importante para ordenar "Continuar Assistindo"
+            $videoPerfil->save();
+        }
+
+        return response()->json(['message' => 'Progresso salvo.'], 200);
+    }
+
+    // 3. Listar Assistindo (GET /videos/assistindo)
+    public function listarAssistindo(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthenticated.'], 401);
+
+        $request->validate(['fk_perfil' => 'required|integer|exists:perfis,pk_perfil']);
+        $fk_perfil = $request->input('fk_perfil');
+
+        // Busca vídeos com progresso iniciado, ordenados pelo último update
+        $videos = Video::join('videos_perfis', 'videos.pk_video', '=', 'videos_perfis.fk_video')
+            ->where('videos_perfis.fk_perfil', $fk_perfil)
+            ->where('videos_perfis.andamento_video_perfil', '!=', '00:00:00')
+            ->select('videos.*', 'videos_perfis.andamento_video_perfil', 'videos_perfis.updated_at as ultimo_acesso')
+            ->orderBy('videos_perfis.updated_at', 'desc')
+            ->with(['tags', 'participantes'])
+            ->get();
+
+        // Formata para adicionar progresso em segundos
+        $videosFormatados = $videos->map(function ($video) {
+            $video->progresso_segundos = $this->timeToSeconds($video->andamento_video_perfil);
+            return $video;
+        });
+
+        return response()->json(['videos' => $videosFormatados], 200);
+    }
+
+    // --- Helpers ---
+    private function timeToSeconds($time)
+    {
+        $parts = explode(':', $time);
+        return ($parts[0] * 3600) + ($parts[1] * 60) + $parts[2];
+    }
+
+
+
+
 
     private function extrairIdYoutube($url)
     {

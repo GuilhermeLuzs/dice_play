@@ -7,17 +7,34 @@ import { VideoDetailsModal } from '@/components/VideoDetailsModal';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVideos, Video } from '@/contexts/VideoContext';
-import { cn } from '@/lib/utils'; // 1. Importar cn
+import { cn } from '@/lib/utils';
+
+// Helper para calcular porcentagem correta
+function calculatePercentage(currentSeconds: number, durationStr: string): number {
+  if (!durationStr) return 0;
+  
+  const parts = durationStr.split(':').map(Number);
+  let totalSeconds = 0;
+
+  if (parts.length === 3) {
+    totalSeconds = (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+  } else if (parts.length === 2) {
+    totalSeconds = (parts[0] * 60) + parts[1];
+  }
+
+  if (totalSeconds === 0) return 0;
+
+  const pct = (currentSeconds / totalSeconds) * 100;
+  return Math.min(100, Math.max(0, Math.floor(pct)));
+}
 
 export default function Assistindo() {
   const navigate = useNavigate();
   const { currentProfile, user } = useAuth();
-  const { getWatchingVideos, getWatchProgress } = useVideos();
+  const { getWatchingVideos, getWatchProgress, loadUserProfileData } = useVideos();
   
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [playingVideo, setPlayingVideo] = useState<Video | null>(null);
-  
-  // 2. Estado da Sidebar
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   if (!user) {
@@ -34,10 +51,8 @@ export default function Assistindo() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* 3. Passar controle */}
       <CatalogSidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
       
-      {/* 4. Ajuste Dinâmico */}
       <main className={cn(
         "pt-16 lg:pt-0 transition-all duration-300",
         sidebarCollapsed ? "lg:ml-20" : "lg:ml-64"
@@ -56,9 +71,9 @@ export default function Assistindo() {
         </header>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 pb-20">
           {watchingVideos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in zoom-in duration-500">
               <Clock className="w-16 h-16 text-muted-foreground/30 mb-4" />
               <h2 className="font-display text-2xl mb-2">Nada em andamento</h2>
               <p className="text-muted-foreground max-w-md">
@@ -67,21 +82,33 @@ export default function Assistindo() {
             </div>
           ) : (
             <div className="flex flex-wrap gap-6">
-              {watchingVideos.map(video => (
-                <div key={video.id} className="relative">
-                  <VideoCard
-                    video={video}
-                    onPlay={() => setPlayingVideo(video)}
-                    onDetails={() => setSelectedVideo(video)}
-                  />
-                  <div className="absolute bottom-[88px] left-0 right-0 mx-3">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded">
-                      <Clock className="w-3 h-3" />
-                      {getWatchProgress(video.id)}% assistido
+              {watchingVideos.map(video => {
+                const currentSeconds = getWatchProgress(video.id);
+                const percent = calculatePercentage(currentSeconds, video.duration);
+
+                return (
+                  <div key={video.id} className="relative group animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <VideoCard
+                      video={video}
+                      onPlay={() => setPlayingVideo(video)}
+                      onDetails={() => setSelectedVideo(video)}
+                    />
+                    
+                    {/* Badge de Porcentagem (Sobre o Card) */}
+                    <div className="absolute top-2 right-2 z-20 pointer-events-none">
+                         <div className={cn(
+                            "flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded shadow-sm backdrop-blur-md transition-colors border",
+                            percent >= 90 
+                                ? "bg-green-500/90 text-white border-green-600" 
+                                : "bg-black/60 text-white border-white/10"
+                         )}>
+                           <Clock className="w-3 h-3" />
+                           {percent}%
+                         </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -102,7 +129,10 @@ export default function Assistindo() {
       {playingVideo && (
         <VideoPlayer 
           video={playingVideo}
-          onClose={() => setPlayingVideo(null)}
+          onClose={() => {
+             setPlayingVideo(null);
+             if (currentProfile) loadUserProfileData(Number(currentProfile.id));
+          }}
         />
       )}
     </div>

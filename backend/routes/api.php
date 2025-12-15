@@ -7,10 +7,13 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\AvatarController;
 use App\Http\Controllers\PerfilController;
 use App\Http\Controllers\VideoController;
+use App\Http\Controllers\DashboardController;
 
 // Rotas Abertas
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+  Route::get('/videos', [VideoController::class, 'listarVideosPublico']);
 
 // Rotas Protegidas (Exigem Token Bearer)
 Route::middleware('auth:sanctum')->group(function () {
@@ -36,17 +39,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/tags', [VideoController::class, 'listarTags']); // Popula o select
 
     Route::get('/videos/filtros', [VideoController::class, 'listarFiltros']);
+
     Route::post('/videos/favoritar/{id_video}', [VideoController::class, 'favoritarVideo']);
     Route::get('/videos/favoritos', [VideoController::class, 'listarFavoritos']);
+
     Route::post('/videos/assistir/{id_video}', [VideoController::class, 'assistirVideo']);
+    Route::put('/videos/progresso/{id_video}', [VideoController::class, 'atualizarMinutagem']);
     Route::get('/videos/assistindo', [VideoController::class, 'listarAssistindo']);
 
     // --- Rotas Exclusivas de Admin ---
     Route::middleware('admin')->group(function () {
         // Estas rotas exigem que o usuário esteja logado E seja Admin.
 
+        Route::get('/dashboard/stats', [DashboardController::class, 'getStats']);
+
         Route::post('/videos', [VideoController::class, 'adicionarVideo']);
-        Route::get('/videos', [VideoController::class, 'listarVideosAdm']);
+        // Route::get('/videos', [VideoController::class, 'listarVideosAdm']);
 
         Route::get('/videos/{id}', [VideoController::class, 'detalhesVideo']); 
         Route::put('/videos/{id}', [VideoController::class, 'editarVideo']);  

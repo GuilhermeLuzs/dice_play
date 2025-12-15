@@ -8,9 +8,10 @@ interface VideoDetailsModalProps {
   video: Video;
   onClose: () => void;
   onPlay: () => void;
+  showFavorite?: boolean; // Prop opcional
 }
 
-export function VideoDetailsModal({ video, onClose, onPlay }: VideoDetailsModalProps) {
+export function VideoDetailsModal({ video, onClose, onPlay, showFavorite = true }: VideoDetailsModalProps) {
   const { toggleFavorite, isFavorite } = useVideos();
   const favorite = isFavorite(video.id);
 
@@ -79,14 +80,19 @@ export function VideoDetailsModal({ video, onClose, onPlay }: VideoDetailsModalP
             <h1 className="font-display text-3xl md:text-4xl text-card-foreground">
               {video.title}
             </h1>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => toggleFavorite(video.id)}
-              className={cn(favorite && "border-primary text-primary")}
-            >
-              <Heart className={cn("w-5 h-5", favorite && "fill-current")} />
-            </Button>
+            
+            {/* BOTÃO DE FAVORITO CONDICIONAL */}
+            {showFavorite && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => toggleFavorite(video.id)}
+                className={cn(favorite && "border-primary text-primary")}
+              >
+                <Heart className={cn("w-5 h-5", favorite && "fill-current")} />
+              </Button>
+            )}
+
           </div>
 
           {/* Channel */}
