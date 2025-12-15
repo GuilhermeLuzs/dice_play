@@ -27,7 +27,7 @@ interface StoredUser {
   account_status: '0' | '1';
   is_admin: '0' | '1';
   profiles?: Profile[];
-  perfis?: Profile[];
+  perfis?: any[]; // Aceita o formato cru do backend
 }
 
 export default function AdminUsuarios() {
@@ -56,14 +56,33 @@ export default function AdminUsuarios() {
     }
   }, [user]);
 
+  // --- HELPER PARA CALCULAR TIPO (Igual ao do PerfilContext) ---
+  const calculateProfileType = (birthDate: string) => {
+      const age = new Date().getFullYear() - new Date(birthDate).getFullYear();
+      if (age < 12) return 'infantil';
+      if (age < 18) return 'juvenil';
+      return 'adulto';
+  };
+
   const loadUsers = async () => {
     setIsLoadingUsers(true);
     try {
       const response = await api.get('/users');
-      const mappedUsers = response.data.map((u: StoredUser) => ({
+      
+      // Mapeamento dos dados do Backend (snake_case) para o Frontend (camelCase)
+      const mappedUsers = response.data.map((u: any) => ({
         ...u,
-        profiles: u.profiles || u.perfis || []
+        profiles: u.perfis ? u.perfis.map((p: any) => ({
+            id: p.pk_perfil.toString(),
+            name: p.nome_perfil,
+            birthDate: p.data_nascimento_perfil,
+            avatar: p.avatar?.img_avatar || '', // Pega a URL do avatar aninhado
+            type: calculateProfileType(p.data_nascimento_perfil),
+            fk_avatar: p.fk_avatar,
+            fk_tipo_perfil: p.fk_tipo_perfil
+        })) : []
       }));
+
       setUsers(mappedUsers);
     } catch (error) {
       console.error("Erro ao carregar usuários", error);
@@ -127,12 +146,9 @@ export default function AdminUsuarios() {
     return 'Adulto';
   };
 
-  // --- NOVA FUNÇÃO PARA CORRIGIR A DATA ---
   const formatDate = (dateString: string) => {
     if (!dateString) return '-';
-    // Pega apenas a parte da data (YYYY-MM-DD) caso venha com tempo
     const datePart = dateString.split('T')[0];
-    // Divide manualmente e remonta
     const [year, month, day] = datePart.split('-');
     return `${day}/${month}/${year}`;
   };
@@ -276,7 +292,6 @@ export default function AdminUsuarios() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Nascimento:</span>
-                  {/* USO DA FUNÇÃO formatDate AQUI */}
                   <p className="font-medium">{formatDate(selectedUser.birth_date)}</p>
                 </div>
                 <div>

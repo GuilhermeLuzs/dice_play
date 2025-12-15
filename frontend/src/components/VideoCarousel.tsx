@@ -9,9 +9,10 @@ interface VideoCarouselProps {
   videos: Video[];
   onPlay: (video: Video) => void;
   onDetails: (video: Video) => void;
+  showFavorite?: boolean; // Prop opcional
 }
 
-export function VideoCarousel({ title, videos, onPlay, onDetails }: VideoCarouselProps) {
+export function VideoCarousel({ title, videos, onPlay, onDetails, showFavorite = true }: VideoCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (direction: 'left' | 'right') => {
@@ -52,6 +53,7 @@ export function VideoCarousel({ title, videos, onPlay, onDetails }: VideoCarouse
               video={video}
               onPlay={() => onPlay(video)}
               onDetails={() => onDetails(video)}
+              showFavorite={showFavorite} // Repassa a configuração
             />
           ))}
         </div>

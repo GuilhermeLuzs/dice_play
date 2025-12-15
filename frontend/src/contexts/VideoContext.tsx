@@ -1,12 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-// import videosData from '@/data/videos.json'; // REMOVIDO: Migrando para API
-import api from '@/services/api'; // 🚨 IMPORTANTE: Serviço Axios para comunicação com a API
-import { useToast } from '@/hooks/use-toast'; // Opcional, para feedback ao usuário
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import api from '@/services/api';
+import { useToast } from '@/hooks/use-toast';
 
-// --- INTERFACES E TIPOS DO FRONT-END (camelCase) ---
+// --- INTERFACES ---
 
 export interface Video {
-  id: string; // pk_video da API
+  id: string; 
   title: string;
   description: string;
   thumbnail: string;
@@ -14,12 +13,13 @@ export interface Video {
   publishedAt: string;
   channelName: string;
   channelAvatar: string;
-  categories: string[]; // tags da API
+  categories: string[]; 
   duration: string;
   rating: string;
   views: number;
   participants: string[];
   master: string;
+  savedProgress?: number; // Vindo do backend (assistindo)
 }
 
 interface WatchProgress {
@@ -28,7 +28,6 @@ interface WatchProgress {
   lastWatched: string;
 }
 
-// Dados mínimos para adicionar um vídeo (Formato Laravel esperado pelo payload)
 interface AddVideoData {
   link_video: string;
   descricao_video: string;
@@ -36,7 +35,6 @@ interface AddVideoData {
   master: string;
   participantes: string[];
   tags: string[];
-  // Campos adicionais do YT para a requisição POST (que o AdminVideos.tsx já monta)
   titulo_video: string;
   thumbnail_video: string;
   data_publicacao_video: string;
@@ -50,75 +48,40 @@ interface VideoContextType {
   videos: Video[];
   favorites: string[];
   watchProgress: WatchProgress[];
+  isLoading: boolean;
+  
   toggleFavorite: (videoId: string) => void;
   isFavorite: (videoId: string) => boolean;
-  updateWatchProgress: (videoId: string, progress: number) => void;
+  
+  // Player Actions
+  startWatching: (videoId: string) => Promise<number>; 
+  updateWatchProgress: (videoId: string, seconds: number, forceSave?: boolean) => void;
   getWatchProgress: (videoId: string) => number;
+  
   getFilteredVideos: (profileType: string, search?: string, category?: string) => Video[];
   getFilteredVideosByTags: (profileType: string, search?: string, selectedTags?: string[]) => Video[];
   getFavoriteVideos: (profileType: string) => Video[];
   getWatchingVideos: (profileType: string) => Video[];
-  // Funções assíncronas para interagir com a API
+  getAllTags: (profileType: string) => string[];
+  
   fetchVideos: () => Promise<void>; 
+  loadUserProfileData: (profileId: number) => Promise<void>;
+  
   addVideo: (videoData: any) => Promise<void>; 
   updateVideo: (id: string, updates: Partial<Video>) => Promise<void>;
   deleteVideo: (id: string) => Promise<void>;
-  getAllTags: (profileType: string) => string[];
 }
 
 const VideoContext = createContext<VideoContextType | undefined>(undefined);
 
-
-// --- HELPERS E MAPEAMENTO DE API ---
-
-interface VideoAPI {
-    pk_video: number;
-    titulo_video: string;
-    link_video: string;
-    descricao_video: string;
-    thumbnail_video: string;
-    data_publicacao_video: string;
-    classificacao_etaria_video: string;
-    duracao_video: string;
-    visualizacoes_video: number;
-    nome_canal_video: string;
-    foto_canal_video?: string;
-    created_at: string;
-    updated_at: string;
-    
-    participantes?: Array<{
-        pk_participante: number;
-        nome_participante: string;
-        foto_participante: string;
-        e_mestre_participante: string; // "1" para mestre, "0" para jogador
-        fk_video: number;
-        created_at: string;
-        updated_at: string;
-    }>;
-    
-    tags: Array<{
-        pk_tag: number;
-        nome_tag: string;
-        created_at: string;
-        updated_at: string;
-        pivot: any;
-    }>;
-}
-
-/**
- * Mapeia o objeto de vídeo retornado pelo Laravel (snake_case) para 
- * o formato esperado pelo Front-end (camelCase).
- */
-const mapApiVideoToFrontVideo = (apiVideo: VideoAPI): Video => {
-    // Extrai participantes
+// --- HELPER DE MAPEAMENTO ---
+const mapApiVideoToFrontVideo = (apiVideo: any): Video => {
     const participantesArray = apiVideo.participantes || [];
-    
-    // Separa mestre dos outros participantes
     let master = 'Não Definido';
     const participants: string[] = [];
     
     if (Array.isArray(participantesArray)) {
-        participantesArray.forEach(participante => {
+        participantesArray.forEach((participante: any) => {
             if (participante.e_mestre_participante === "1") {
                 master = participante.nome_participante;
             } else {
@@ -127,7 +90,7 @@ const mapApiVideoToFrontVideo = (apiVideo: VideoAPI): Video => {
         });
     }
     
-    return {
+    const video: Video = {
         id: String(apiVideo.pk_video), 
         title: apiVideo.titulo_video,
         link: apiVideo.link_video,
@@ -141,10 +104,14 @@ const mapApiVideoToFrontVideo = (apiVideo: VideoAPI): Video => {
         views: apiVideo.visualizacoes_video,
         master: master,
         participants: participants,
-        
-        // Mapeia as tags
-        categories: apiVideo.tags.map(tag => tag.nome_tag),
+        categories: apiVideo.tags ? apiVideo.tags.map((tag: any) => tag.nome_tag) : [],
     };
+
+    if (apiVideo.progresso_segundos) {
+        video.savedProgress = apiVideo.progresso_segundos;
+    }
+
+    return video;
 };
 
 function getRatingLevel(rating: string): number {
@@ -161,226 +128,163 @@ function getMaxRatingForType(type: string): number {
   }
 }
 
-// --- PROVIDER PRINCIPAL ---
+// --- PROVIDER ---
 
 export function VideoProvider({ children }: { children: ReactNode }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [watchProgress, setWatchProgress] = useState<WatchProgress[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // 🚨 NOVO: Função para buscar e mapear vídeos da API
+  const saveTimeoutRef = useRef<{[key: string]: NodeJS.Timeout}>({});
+
+  // 1. Fetch Videos (Sem localStorage fallback de dados)
   const fetchVideos = async () => {
     try {
+      setIsLoading(true);
       const response = await api.get('/videos');
-      // Assume-se que a API retorna a lista de vídeos dentro de 'response.data.videos'
-      const apiVideos = response.data.videos as VideoAPI[]; 
-      
+      const apiVideos = response.data.videos; 
       const mappedVideos = apiVideos.map(mapApiVideoToFrontVideo);
       setVideos(mappedVideos);
-      
-      // Cache no localStorage para fallback/uso inicial
-      localStorage.setItem('diceplay_videos', JSON.stringify(mappedVideos));
-
     } catch (error) {
-      console.error("Erro ao carregar vídeos da API:", error);
+      console.error("Erro ao carregar vídeos:", error);
       toast({ 
         title: "Erro de Conexão", 
-        description: "Não foi possível carregar o catálogo de vídeos.", 
+        description: "Não foi possível conectar ao servidor.", 
         variant: "destructive" 
       });
-      // Fallback: Carregar do localStorage se a API falhar
-      const storedVideos = localStorage.getItem('diceplay_videos');
-      if (storedVideos) {
-        setVideos(JSON.parse(storedVideos));
-      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 2. Load User Profile Data
+  const loadUserProfileData = async (profileId: number) => {
+    try {
+        const favResponse = await api.get(`/videos/favoritos?fk_perfil=${profileId}`);
+        const favIds = favResponse.data.data.map((v: any) => String(v.pk_video));
+        setFavorites(favIds);
+
+        const watchResponse = await api.get(`/videos/assistindo?fk_perfil=${profileId}`);
+        const history: WatchProgress[] = watchResponse.data.videos.map((v: any) => ({
+            videoId: String(v.pk_video),
+            progress: v.progresso_segundos,
+            lastWatched: v.ultimo_acesso
+        }));
+        setWatchProgress(history);
+    } catch (error) {
+        console.error("Erro ao carregar perfil:", error);
     }
   };
 
   useEffect(() => {
-    fetchVideos(); // Inicia o carregamento de vídeos da API
-    
-    // Manter favoritos e progresso no localStorage (para persistência local)
-    const storedFavorites = localStorage.getItem('diceplay_favorites');
-    const storedProgress = localStorage.getItem('diceplay_watch_progress');
-    
-    if (storedFavorites) setFavorites(JSON.parse(storedFavorites));
-    if (storedProgress) setWatchProgress(JSON.parse(storedProgress));
+    fetchVideos(); 
   }, []);
 
-  // --- Funções CRUD da API (Atualizadas) ---
+  // --- PLAYER LOGIC ---
 
-  const addVideo = async (payload: AddVideoData) => {
+  const startWatching = async (videoId: string): Promise<number> => {
+    const currentProfileStr = localStorage.getItem('diceplay_current_profile');
+    if (!currentProfileStr) return 0;
+    const profileId = JSON.parse(currentProfileStr).id;
+
     try {
-      // O payload já está em snake_case (formato Laravel)
-      const response = await api.post('/videos', payload);
-      const newApiVideo = response.data.video as VideoAPI; 
-
-      // Mapeia o novo vídeo retornado pela API
-      const newVideo = mapApiVideoToFrontVideo(newApiVideo);
-
-      setVideos(prev => {
-        const updated = [...prev, newVideo];
-        localStorage.setItem('diceplay_videos', JSON.stringify(updated));
-        return updated;
-      });
-      toast({ title: "Sucesso", description: "Vídeo adicionado com sucesso." });
-    } catch (error: any) {
-      console.error("Erro ao adicionar vídeo:", error);
-      const errorMessage = error.response?.data?.message || "Falha ao salvar o vídeo.";
-      toast({ title: "Erro", description: errorMessage, variant: "destructive" });
-      throw error;
+        const response = await api.post(`/videos/assistir/${videoId}`, { fk_perfil: profileId });
+        return response.data.progresso_segundos || 0;
+    } catch (error) {
+        console.error("Erro ao iniciar sessão de vídeo:", error);
+        return 0;
     }
   };
 
-  const updateVideo = async (id: string, updates: Partial<Video>) => {
-    try {
-      // Mapeamento inverso para enviar no formato snake_case esperado pelo Laravel
-      const payload: any = {
-        link_video: updates.link,
-        descricao_video: updates.description,
-        classificacao_etaria_video: updates.rating,
-        master: updates.master,
-        participantes: updates.participants,
-        tags: updates.categories, 
-      };
-
-      // 🚨 Chama a rota PUT/PATCH para atualização
-      await api.put(`/videos/${id}`, payload); 
-
-      // Atualiza o estado local apenas com as alterações (otimista)
-      setVideos(prev => {
-        const updated = prev.map(v => v.id === id ? { ...v, ...updates } : v);
-        localStorage.setItem('diceplay_videos', JSON.stringify(updated));
-        return updated;
-      });
-      toast({ title: "Sucesso", description: "Vídeo atualizado com sucesso." });
-    } catch (error: any) {
-      console.error("Erro ao atualizar vídeo:", error);
-      const errorMessage = error.response?.data?.message || "Falha ao atualizar o vídeo.";
-      toast({ title: "Erro", description: errorMessage, variant: "destructive" });
-      throw error;
-    }
-  };
-
-  const deleteVideo = async (id: string) => {
-    try {
-      // 🚨 Chama a rota DELETE
-      await api.delete(`/videos/${id}`);
-
-      // Atualiza o estado local
-      setVideos(prev => {
-        const updated = prev.filter(v => v.id !== id);
-        localStorage.setItem('diceplay_videos', JSON.stringify(updated));
-        return updated;
-      });
-      toast({ title: "Sucesso", description: "Vídeo excluído com sucesso." });
-    } catch (error: any) {
-      console.error("Erro ao excluir vídeo:", error);
-      const errorMessage = error.response?.data?.message || "Falha ao excluir o vídeo.";
-      toast({ title: "Erro", description: errorMessage, variant: "destructive" });
-      throw error;
-    }
-  };
-
-  // --- Demais Funções (Permanecem no localStorage) ---
-
-  const toggleFavorite = (videoId: string) => {
-    setFavorites(prev => {
-      const updated = prev.includes(videoId)
-        ? prev.filter(id => id !== videoId)
-        : [...prev, videoId];
-      localStorage.setItem('diceplay_favorites', JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  const isFavorite = (videoId: string) => favorites.includes(videoId);
-
-  const updateWatchProgress = (videoId: string, progress: number) => {
+  const updateWatchProgress = (videoId: string, seconds: number, forceSave = false) => {
+    // Atualiza estado local
     setWatchProgress(prev => {
       const existing = prev.findIndex(p => p.videoId === videoId);
-      let updated: WatchProgress[];
-      
       if (existing !== -1) {
-        updated = [...prev];
-        updated[existing] = { videoId, progress, lastWatched: new Date().toISOString() };
-      } else {
-        updated = [...prev, { videoId, progress, lastWatched: new Date().toISOString() }];
+        const updated = [...prev];
+        updated[existing] = { ...updated[existing], progress: seconds, lastWatched: new Date().toISOString() };
+        return updated;
       }
-      
-      localStorage.setItem('diceplay_watch_progress', JSON.stringify(updated));
-      return updated;
+      return [...prev, { videoId, progress: seconds, lastWatched: new Date().toISOString() }];
     });
+
+    const currentProfileStr = localStorage.getItem('diceplay_current_profile');
+    if (!currentProfileStr) return;
+    const profileId = JSON.parse(currentProfileStr).id;
+
+    const saveToBackend = async () => {
+        try {
+            await api.put(`/videos/progresso/${videoId}`, {
+                fk_perfil: profileId,
+                tempo_atual: seconds
+            });
+        } catch (error) {
+            console.error("Erro ao salvar progresso:", error);
+        }
+    };
+
+    if (forceSave) {
+        if (saveTimeoutRef.current[videoId]) clearTimeout(saveTimeoutRef.current[videoId]);
+        saveToBackend();
+        return;
+    }
+
+    if (saveTimeoutRef.current[videoId]) clearTimeout(saveTimeoutRef.current[videoId]);
+    
+    saveTimeoutRef.current[videoId] = setTimeout(() => {
+        saveToBackend();
+    }, 5000); 
   };
 
   const getWatchProgress = (videoId: string): number => {
     const found = watchProgress.find(p => p.videoId === videoId);
-    return found?.progress || 0;
+    return found ? found.progress : 0;
   };
 
-  const getFilteredVideos = (profileType: string, search?: string, category?: string): Video[] => {
-    const maxRating = getMaxRatingForType(profileType);
-    
-    return videos.filter(video => {
-      const videoRating = getRatingLevel(video.rating);
-      if (videoRating > maxRating) return false;
-      
-      if (search) {
-        const searchLower = search.toLowerCase();
-        if (!video.title.toLowerCase().includes(searchLower) &&
-            !video.description.toLowerCase().includes(searchLower) &&
-            !video.channelName.toLowerCase().includes(searchLower)) {
-          return false;
-        }
-      }
-      
-      if (category && !video.categories.includes(category)) {
-        return false;
-      }
-      
-      return true;
-    });
+  const toggleFavorite = async (videoId: string) => {
+    const currentProfileStr = localStorage.getItem('diceplay_current_profile');
+    if (!currentProfileStr) {
+        toast({ title: "Erro", description: "Selecione um perfil.", variant: "destructive" });
+        return;
+    }
+    const profileId = JSON.parse(currentProfileStr).id;
+
+    const isFav = favorites.includes(videoId);
+    setFavorites(prev => isFav ? prev.filter(id => id !== videoId) : [...prev, videoId]);
+
+    try {
+        await api.post(`/videos/favoritar/${videoId}`, { fk_perfil: profileId });
+    } catch (error) {
+        setFavorites(prev => isFav ? [...prev, videoId] : prev.filter(id => id !== videoId));
+    }
   };
+
+  const isFavorite = (videoId: string) => favorites.includes(videoId);
+
+  // --- FILTROS ---
 
   const getFilteredVideosByTags = (profileType: string, search?: string, selectedTags?: string[]): Video[] => {
     const maxRating = getMaxRatingForType(profileType);
-    
     return videos.filter(video => {
-      const videoRating = getRatingLevel(video.rating);
-      if (videoRating > maxRating) return false;
-      
+      if (getRatingLevel(video.rating) > maxRating) return false;
       if (search) {
         const searchLower = search.toLowerCase();
         if (!video.title.toLowerCase().includes(searchLower) &&
             !video.description.toLowerCase().includes(searchLower) &&
-            !video.channelName.toLowerCase().includes(searchLower)) {
-          return false;
-        }
+            !video.channelName.toLowerCase().includes(searchLower)) return false;
       }
-      
       if (selectedTags && selectedTags.length > 0) {
-        const hasMatchingTag = selectedTags.some(tag => video.categories.includes(tag));
-        if (!hasMatchingTag) return false;
+         return selectedTags.some(tag => video.categories.includes(tag));
       }
-      
       return true;
     });
   };
-
-  const getAllTags = (profileType: string): string[] => {
-    const maxRating = getMaxRatingForType(profileType);
-    const tagsSet = new Set<string>();
-    
-    videos.forEach(video => {
-      const videoRating = getRatingLevel(video.rating);
-      if (videoRating <= maxRating) {
-        video.categories.forEach(cat => tagsSet.add(cat));
-      }
-    });
-    
-    return Array.from(tagsSet).sort();
-  };
+  
+  const getFilteredVideos = (profileType: string, search?: string, category?: string) => {
+      return getFilteredVideosByTags(profileType, search, category ? [category] : undefined);
+  }
 
   const getFavoriteVideos = (profileType: string): Video[] => {
     return getFilteredVideos(profileType).filter(v => favorites.includes(v.id));
@@ -388,30 +292,59 @@ export function VideoProvider({ children }: { children: ReactNode }) {
 
   const getWatchingVideos = (profileType: string): Video[] => {
     const watchingIds = watchProgress
-      .filter(p => p.progress > 0 && p.progress < 100)
-      .map(p => p.videoId);
+        .filter(p => p.progress > 5) 
+        .map(p => p.videoId);
     return getFilteredVideos(profileType).filter(v => watchingIds.includes(v.id));
   };
 
+  const getAllTags = (profileType: string): string[] => {
+    const maxRating = getMaxRatingForType(profileType);
+    const tagsSet = new Set<string>();
+    videos.forEach(video => {
+      if (getRatingLevel(video.rating) <= maxRating) {
+        video.categories.forEach(cat => tagsSet.add(cat));
+      }
+    });
+    return Array.from(tagsSet).sort();
+  };
+
+  // --- ADMIN ---
+  const addVideo = async (payload: AddVideoData) => {
+    const response = await api.post('/videos', payload);
+    const newVideo = mapApiVideoToFrontVideo(response.data.video);
+    setVideos(prev => [...prev, newVideo]);
+    toast({ title: "Sucesso", description: "Vídeo adicionado." });
+  };
+
+  const updateVideo = async (id: string, updates: Partial<Video>) => {
+    const payload: any = {
+        link_video: updates.link,
+        descricao_video: updates.description,
+        classificacao_etaria_video: updates.rating,
+        master: updates.master,
+        participantes: updates.participants,
+        tags: updates.categories,
+    };
+    await api.put(`/videos/${id}`, payload);
+    setVideos(prev => prev.map(v => v.id === id ? { ...v, ...updates } : v));
+    toast({ title: "Sucesso", description: "Vídeo atualizado." });
+  };
+
+  const deleteVideo = async (id: string) => {
+    await api.delete(`/videos/${id}`);
+    setVideos(prev => prev.filter(v => v.id !== id));
+    toast({ title: "Sucesso", description: "Vídeo excluído." });
+  };
 
   return (
     <VideoContext.Provider value={{
-      videos,
-      favorites,
-      watchProgress,
-      toggleFavorite,
-      isFavorite,
-      updateWatchProgress,
-      getWatchProgress,
-      getFilteredVideos,
-      getFilteredVideosByTags,
-      getFavoriteVideos,
-      getWatchingVideos,
-      fetchVideos, 
-      addVideo,
-      updateVideo,
-      deleteVideo,
-      getAllTags
+      videos, favorites, watchProgress, isLoading,
+      toggleFavorite, isFavorite, 
+      startWatching, // EXPORTANDO A NOVA FUNÇÃO
+      updateWatchProgress, getWatchProgress,
+      getFilteredVideos, getFilteredVideosByTags, getFavoriteVideos, getWatchingVideos, getAllTags,
+      fetchVideos, loadUserProfileData,
+      addVideo, updateVideo, deleteVideo
     }}>
       {children}
     </VideoContext.Provider>
@@ -420,8 +353,6 @@ export function VideoProvider({ children }: { children: ReactNode }) {
 
 export function useVideos() {
   const context = useContext(VideoContext);
-  if (context === undefined) {
-    throw new Error('useVideos must be used within a VideoProvider');
-  }
+  if (context === undefined) throw new Error('useVideos error');
   return context;
 }

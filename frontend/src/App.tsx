@@ -21,6 +21,7 @@ import PerfilConfig from "./pages/PerfilConfig";
 import NotFound from "./pages/NotFound";
 import AdminVideos from "./pages/AdminVideos";
 import AdminUsuarios from "./pages/AdminUsuarios";
+import AdminDashboard from "./pages/AdminDashboard";
 
 const queryClient = new QueryClient();
 
@@ -57,9 +58,10 @@ const App = () => (
 
                   {/* --- ROTAS DE ADMIN --- */}
                   <Route element={<PrivateRoute adminOnly={true} />}>
+                    <Route path="/admin/dashboard" element={<AdminDashboard />} />
                     <Route path="/admin/videos" element={<AdminVideos />} />
                     <Route path="/admin/usuarios" element={<AdminUsuarios />} />
-                    <Route path="/admin" element={<Navigate to="/admin/videos" replace />} />
+                    <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
                   </Route>
 
                   <Route path="*" element={<NotFound />} />
